@@ -28,7 +28,7 @@ const urlToGenerativePart = async (url) => {
 
 export const analyzeFoodWithAI = async (productData, userPreferences) => {
   try {
-    console.log("Analyzing with Model: gemini-2.5-flash-lite (v2)");
+    console.log("Analyzing with Model: gemini-2.0-flash-lite");
     let prompt = "";
     let imagePart = null;
     let tools = [];
@@ -111,7 +111,7 @@ Reply ONLY in JSON:
 
       try {
         const response = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${GEMINI_API_KEY}`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -175,7 +175,7 @@ Reply ONLY in JSON:
 
 export const chatWithAI = async (productData, userPreferences, history, userQuestion) => {
   try {
-    console.log("Chatting with Model: gemini-2.5-flash-lite");
+    console.log("Chatting with Model: gemini-2.0-flash-lite");
 
     // Construct context from previous messages if needed, 
     // but for simplicity and token limits, we might just send the current context + question.
@@ -221,7 +221,7 @@ Reply with just the text answer.
     const body = { contents };
 
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${GEMINI_API_KEY}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },

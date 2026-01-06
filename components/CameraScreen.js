@@ -9,8 +9,11 @@ const SCANNER_SIZE = width * 0.7;
 export default function CameraScreen({ onScan }) {
   const [facing, setFacing] = useState('back');
   const [permission, requestPermission] = useCameraPermissions();
+  // State for manual trigger
+  const [isScanning, setIsScanning] = useState(false);
   const [isCameraReady, setIsCameraReady] = useState(false);
   const [scanned, setScanned] = useState(false);
+  const scanTimeoutRef = useRef(null);
 
   // Delay rendering to allow native resources to free up
   useEffect(() => {
@@ -23,15 +26,37 @@ export default function CameraScreen({ onScan }) {
   // Reset scanned state when component mounts/remounts (if kept mounted, parent should handle reset)
   useEffect(() => {
     setScanned(false);
+    setIsScanning(false);
+    return () => {
+      if (scanTimeoutRef.current) clearTimeout(scanTimeoutRef.current);
+    };
   }, []);
 
   const handleBarCodeScanned = ({ type, data }) => {
-    if (scanned) return;
+    if (!isScanning || scanned) return;
+
+    // Success!
     setScanned(true);
-    // alert(`Bar code with type ${type} and data ${data} has been scanned!`);
+    setIsScanning(false);
+    if (scanTimeoutRef.current) clearTimeout(scanTimeoutRef.current);
+
     if (onScan) {
       onScan({ type, data });
     }
+  };
+
+  const handleManualScan = () => {
+    if (isScanning) return;
+
+    setIsScanning(true);
+    setScanned(false);
+
+    // Timeout if nothing found in 3 seconds
+    if (scanTimeoutRef.current) clearTimeout(scanTimeoutRef.current);
+    scanTimeoutRef.current = setTimeout(() => {
+      setIsScanning(false);
+      alert("No barcode detected. Please adjust position and try again.");
+    }, 3000);
   };
 
   if (!permission || !isCameraReady) {
@@ -62,8 +87,9 @@ export default function CameraScreen({ onScan }) {
       <CameraView
         style={StyleSheet.absoluteFill}
         facing={facing}
-        mode="picture" // CameraView in SDK 50+ might auto-enable scanner if onBarcodeScanned is present, but 'mode' might be relevant. 'picture' + scanner usually works.
-        onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
+        mode="picture"
+        // Only enable scanner listener when we are manually scanning
+        onBarcodeScanned={isScanning ? handleBarCodeScanned : undefined}
         barcodeScannerSettings={{
           barcodeTypes: ["qr", "ean13", "ean8", "upc_e", "upc_a", "code128"],
         }}
@@ -87,17 +113,23 @@ export default function CameraScreen({ onScan }) {
         <View style={styles.unfocusedContainer} />
       </View>
 
-      {/* Controls Overlay */}
-      <View style={styles.controlsContainer}>
-        <TouchableOpacity style={styles.button} onPress={toggleCameraFacing}>
-          <Ionicons name="camera-reverse-outline" size={32} color="white" />
+      {/* Top Controls (Flip) */}
+      <View style={styles.topControls}>
+        <TouchableOpacity style={styles.iconButton} onPress={toggleCameraFacing}>
+          <Ionicons name="camera-reverse-outline" size={30} color="white" />
         </TouchableOpacity>
+      </View>
 
-        {scanned && (
-          <TouchableOpacity style={styles.rescanButton} onPress={() => setScanned(false)}>
-            <Text style={styles.rescanText}>Tap to Scan Again</Text>
-          </TouchableOpacity>
-        )}
+      {/* Bottom Controls (Shutter/Scan) */}
+      <View style={styles.bottomControls}>
+        <TouchableOpacity
+          style={styles.shutterButtonOuter}
+          onPress={handleManualScan}
+          disabled={isScanning}
+        >
+          <View style={[styles.shutterButtonInner, isScanning && styles.shutterButtonActive]} />
+        </TouchableOpacity>
+        <Text style={styles.hintText}>{isScanning ? "Scanning..." : "Tap to Scan"}</Text>
       </View>
     </View>
   );
@@ -159,28 +191,49 @@ const styles = StyleSheet.create({
   bottomLeft: { bottom: 0, left: 0, borderTopWidth: 0, borderRightWidth: 0 },
   bottomRight: { bottom: 0, right: 0, borderTopWidth: 0, borderLeftWidth: 0 },
 
-  controlsContainer: {
+  // Controls
+  topControls: {
     position: 'absolute',
-    top: 40,
+    top: 50,
     right: 20,
-    left: 20,
-    alignItems: 'flex-end',
   },
-  button: {
+  iconButton: {
     padding: 10,
     backgroundColor: 'rgba(0,0,0,0.3)',
     borderRadius: 50,
   },
-  rescanButton: {
+  bottomControls: {
     position: 'absolute',
-    bottom: -Dimensions.get('window').height * 0.8, // Push to bottom roughly
-    alignSelf: 'center',
-    backgroundColor: 'white',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 20,
+    bottom: 50,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
   },
-  rescanText: {
-    fontWeight: 'bold',
+  shutterButtonOuter: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    borderWidth: 4,
+    borderColor: 'white',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+  },
+  shutterButtonInner: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: 'white',
+  },
+  shutterButtonActive: {
+    backgroundColor: '#2196F3', // Change color when scanning
+    transform: [{ scale: 0.9 }],
+  },
+  hintText: {
+    color: 'white',
+    fontSize: 14,
+    opacity: 0.8,
   }
 });

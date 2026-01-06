@@ -1,4 +1,4 @@
-import { analyzeFoodWithAI } from './aiService';
+// import { analyzeWithN8N } from './n8nService';
 
 // Fallback mock analysis if AI fails or for testing
 const mockAnalyze = (product, userPreferences) => {
@@ -25,9 +25,23 @@ const mockAnalyze = (product, userPreferences) => {
     };
 };
 
+// Hardcoded mock for specific UPC
+const MOCK_PRODUCT_UPC = "8886467124723";
+const MOCK_PRODUCT_DATA = {
+    productName: "Pringles Sour Cream and Onion",
+    ingredient: "Corn, Vegetable Oil (Palm Oil), Sugar, High Fructose Corn Syrup, Salt, Artificial Flavor, Red 40, Yellow 5.",
+    imageUri: "https://images.unsplash.com/photo-1621447591183-5f34ccf9cd9e?auto=format&fit=crop&w=800&q=80",
+    nutritionImageUri: "https://images.unsplash.com/photo-1621447591183-5f34ccf9cd9e?auto=format&fit=crop&w=800&q=80",
+    status: "NO",
+    reason: "Contains multiple unhealthy additives.",
+    health_score: 15,
+    harmful_ingredients: "High Fructose Corn Syrup, Red 40, Yellow 5, Palm Oil"
+};
+
 export const lookupProduct = async (barcodeData, userPreferences) => {
     try {
         console.log(`Fetching data for barcode: ${barcodeData}`);
+
         const response = await fetch(`https://world.openfoodfacts.org/api/v0/product/${barcodeData}.json`, {
             headers: {
                 'User-Agent': 'FoodScannerApp/1.0 (expo-react-native) - Android'
@@ -35,15 +49,31 @@ export const lookupProduct = async (barcodeData, userPreferences) => {
         });
         const data = await response.json();
 
+        // 1. Immediate Mock Check (After fetch to try and get image)
+        if (barcodeData === MOCK_PRODUCT_UPC) {
+            console.log("Mock UPC detected. Returning hardcoded data (with real image if found).");
+
+            let fetchedImage = MOCK_PRODUCT_DATA.imageUri;
+            if (data.status === 1 && data.product) {
+                fetchedImage = data.product.image_url || data.product.image_front_url || fetchedImage;
+            }
+
+            return {
+                ...MOCK_PRODUCT_DATA,
+                imageUri: fetchedImage,
+                nutritionImageUri: fetchedImage,
+                // Ensure ingredients are passed for chat context
+                ingredient: MOCK_PRODUCT_DATA.ingredient
+            };
+        }
+
         if (data.status === 1) {
             const product = data.product;
 
-            // Debugging: Log available keys to help diagnose missing ingredients
             console.log("Product keys:", Object.keys(product).filter(k => k.includes('ingredient')));
 
             let ingredient = product.ingredients_text_en || product.ingredients_text;
 
-            // Fallback: Try to construct from ingredients array if text is missing
             if (!ingredient && product.ingredients && Array.isArray(product.ingredients)) {
                 console.log("Constructing ingredients from array...");
                 ingredient = product.ingredients.map(i => i.text).join(", ");
@@ -57,40 +87,20 @@ export const lookupProduct = async (barcodeData, userPreferences) => {
             const nutritionImageUri = product.image_nutrition_url || product.image_nutrition_small_url || imageUri;
             const productName = product.product_name || "Unknown Product";
 
-            const productData = {
-                productName,
-                ingredient,
-                imageUri,
-                nutritionImageUri,
-                missingIngredients: ingredient === "Ingredients not found"
-            };
-
-            // Call AI Service
-            console.log("Calling Gemini AI service");
-
-            let aiResult = null;
-
-            try {
-                aiResult = await analyzeFoodWithAI(productData, userPreferences);
-
-                if (!aiResult) {
-                    throw new Error("Gemini returned null");
-                }
-            } catch (e) {
-                console.log("Gemini AI failed, falling back to local logic.", e);
-                aiResult = mockAnalyze(product, userPreferences);
-            }
-
+            // Fallback to local logic (No AI/n8n)
+            console.log("Falling back to local logic.");
+            const localResult = mockAnalyze(product, userPreferences);
 
             return {
                 imageUri,
                 productName,
-                ingredient, // Default (e.g. "Ingredients not found")
-                ...aiResult // AI result overrides 'ingredient' if it found one
+                ingredient,
+                nutritionImageUri,
+                ...localResult
             };
         } else {
             console.log("Product not found in Open Food Facts");
-            return null; // Product not found
+            return null;
         }
     } catch (error) {
         console.error("API Lookup Error:", error);
